@@ -8,6 +8,10 @@ router.get('/list', authenticate, async (req, res) => {
     try {
         const files = await ftpService.listFiles();
         res.json({ success: true, files });
+        // در میدلور authenticate
+        console.log('Received token:', token);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        console.log('Decoded token:', decoded);
     } catch (err) {
         res.status(500).json({
             success: false,
@@ -16,23 +20,41 @@ router.get('/list', authenticate, async (req, res) => {
     }
 });
 
-// دانلود فایل
-router.get('/download/:filename', authenticate, async (req, res) => {
+// دانلود فایل با لینک مستقیم
+router.get('/download/:filename', async (req, res) => {
     try {
         const { filename } = req.params;
-        const tempPath = `/tmp/${filename}`;
 
-        await ftpService.downloadFile(filename, tempPath);
+        // تنظیم هدرها برای دانلود
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-        res.download(tempPath, filename, (err) => {
-            if (err) console.error('Download error:', err);
-            // حذف فایل موقت پس از دانلود
-            require('fs').unlinkSync(tempPath);
-        });
+        // ایجاد استریم فایل و ارسال به کاربر
+        const fileStream = await ftpService.getFileStream(filename);
+        fileStream.pipe(res);
+
     } catch (err) {
         res.status(500).json({
             success: false,
             error: 'Download failed'
+        });
+    }
+});
+
+// ایجاد لینک عمومی برای دانلود
+router.get('/public-link/:filename', authenticate, async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const downloadLink = `${baseUrl}/api/ftp/download/${encodeURIComponent(filename)}`;
+
+        res.json({
+            success: true,
+            downloadLink: downloadLink
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate link'
         });
     }
 });

@@ -8,19 +8,17 @@ const cookieParser = require('cookie-parser');
 app.use('/api/ftp', ftpRoutes);
 
 // تنظیمات CORS
+// اصلاح ترتیب middleware ها
 app.use(cors({
-    origin: 'http://localhost:3000', // آدرس دقیق فرانت‌اند
-    credentials: true // برای کوکی‌ها و احراز هویت
+    origin: 'http://localhost:3000',
+    credentials: true
 }));
 
-// سایر middlewareها
 app.use(express.json());
+app.use(cookieParser());
 
-app.use(cookieParser())
-
-// routes
+// سپس routes ها را اضافه کنید
 app.use('/api/auth', require('./routes/authRoutes'));
-
 app.use('/api/ftp', ftpRoutes);
 
 const PORT = 5000;
