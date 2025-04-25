@@ -2,7 +2,11 @@
   "app": "ftp-safenet",
   "port": 5000,
   "build": {
-    "location": "iran"
+    "location": "iran",
+    "commands": {
+      "pre": "npm install",
+      "post": "npm start"
+    }
   },
   "disks": []
 }
