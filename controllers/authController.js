@@ -100,7 +100,6 @@ exports.loginWithPassword = async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        
         const userResult = await pool.query(
             'SELECT id, username, email, password FROM users WHERE username = $1',
             [username]
@@ -112,31 +111,38 @@ exports.loginWithPassword = async (req, res) => {
 
         const user = userResult.rows[0];
 
-        
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-
         const token = jwt.sign(
             { id: user.id },
-            process.env.JWT_SECRET, 
-            { expiresIn: '1h' }
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
         );
 
+        // تنظیم کوکی با گزینه‌های صحیح
+        res.cookie('token', token, {
+            httpOnly: false, // اجازه دسترسی از JavaScript
+            secure: false, // در محیط توسعه
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 روز
+            path: '/',
+            domain: undefined // اجازه می‌دهد مرورگر دامنه را خودش تعیین کند
+        });
 
-        
-        res.status(200)
-            .cookie('token', token, { httpOnly: true, secure: false }) 
-            .json({
-                success: true,
-                user: {
-                    id: user.id,
-                    username: user.username,
-                    email: user.email
-                }
-            });
+        console.log('Setting cookie with token:', token);
+
+        res.status(200).json({
+            success: true,
+            token: token, // ارسال توکن در پاسخ برای استفاده در هدر
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email
+            }
+        });
 
     } catch (err) {
         console.error('Login error:', err);
