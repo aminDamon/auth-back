@@ -1,18 +1,30 @@
-const { Pool } = require('pg');
+const { Sequelize } = require('sequelize');
 
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'node_auth',
-  password: process.env.DB_PASS || 'amin.hadi1382', // رمز واقعی اینجا قرار دهید
-  port: process.env.DB_PORT || 5432,
-  ssl: false, // برای توسعه غیرفعال کنید
-});
+const sequelize = new Sequelize(
+    process.env.DB_NAME || 'node_auth',
+    process.env.DB_USER || 'postgres',
+    process.env.DB_PASS || 'amin.hadi1382',
+    {
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        dialect: 'postgres',
+        logging: false,
+        pool: {
+            max: 5,
+            min: 0,
+            acquire: 30000,
+            idle: 10000
+        }
+    }
+);
 
 // تست اتصال
-pool.query('SELECT NOW()', (err) => {
-  if (err) console.error('Database connection error:', err);
-  else console.log('Database connected successfully');
-});
+sequelize.authenticate()
+    .then(() => {
+        console.log('Database connected successfully');
+    })
+    .catch(err => {
+        console.error('Database connection error:', err);
+    });
 
-module.exports = { pool };
+module.exports = { sequelize };
