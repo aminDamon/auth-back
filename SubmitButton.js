@@ -21,10 +21,10 @@ const SubmitButton = ({
 
         try {
             const endpoint = loginMethod === 'password'
-                ? '/api/auth/login-password'
-                : '/api/auth/request-verification';
+                ? 'api/auth/login-password'
+                : 'api/auth/request-verification';
 
-            const response = await fetch(`https://api.safescap.ir${endpoint}`, {
+            const response = await fetch(`https://ftp-safenet.liara.run/${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password }),

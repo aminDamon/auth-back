@@ -103,15 +103,25 @@ exports.loginWithPassword = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id },
+            { id: user.id, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
 
+        // تنظیم کوکی توکن
         res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 روز
+            path: '/'
+        });
+
+        // تنظیم کوکی نقش کاربر
+        res.cookie('userRole', user.role, {
             httpOnly: false,
-            secure: false,
-            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000,
             path: '/'
         });
@@ -120,8 +130,8 @@ exports.loginWithPassword = async (req, res) => {
         if (user.role === 'admin') {
             res.cookie('isAdmin', 'true', {
                 httpOnly: false,
-                secure: false,
-                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
                 maxAge: 7 * 24 * 60 * 60 * 1000,
                 path: '/'
             });
@@ -129,6 +139,7 @@ exports.loginWithPassword = async (req, res) => {
 
         res.json({
             message: 'ورود با موفقیت انجام شد',
+            token, // ارسال توکن در پاسخ
             user: {
                 id: user.id,
                 username: user.username,
@@ -155,13 +166,17 @@ exports.loginWithEmail = async (req, res) => {
             return res.status(404).json({ error: 'کاربری با این ایمیل یافت نشد' });
         }
 
-        const verificationCode = crypto.randomBytes(3).toString('hex');
-        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 دقیقه
+        if (!user.isVerified) {
+            return res.status(401).json({ error: 'لطفاً ابتدا حساب کاربری خود را تأیید کنید' });
+        }
 
-        await user.update({
-            verificationToken: verificationCode,
-            verificationTokenExpire: expiresAt
-        });
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedCode = await bcrypt.hash(verificationCode, 10);
+
+        await User.update(
+            { verificationCode: hashedCode, verificationCodeExpires: new Date(Date.now() + 5 * 60 * 1000) },
+            { where: { id: user.id } }
+        );
 
         await sendVerificationEmail(email, verificationCode);
 
@@ -194,48 +209,155 @@ exports.loginAdmin = async (req, res) => {
     try {
         const { username, password } = req.body;
 
-        // یافتن کاربر با نام کاربری
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(401).json({ message: 'نام کاربری یا رمز عبور اشتباه است' });
+        const admin = await User.findOne({
+            where: { username, role: 'admin' }
+        });
+
+        if (!admin) {
+            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
         }
 
-        // بررسی رمز عبور
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'نام کاربری یا رمز عبور اشتباه است' });
+        const isPasswordValid = await bcrypt.compare(password, admin.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
         }
 
-        // بررسی نقش ادمین
-        if (user.role !== 'admin') {
-            return res.status(403).json({ message: 'شما دسترسی ادمین ندارید' });
-        }
-
-        // تولید توکن
         const token = jwt.sign(
-            { userId: user._id, role: user.role },
+            { id: admin.id, role: admin.role },
             process.env.JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: '7d' }
         );
 
-        // تنظیم کوکی
+        // تنظیم کوکی توکن
         res.cookie('token', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 24 * 60 * 60 * 1000 // 24 ساعت
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+
+        // تنظیم کوکی نقش کاربر
+        res.cookie('userRole', admin.role, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+
+        // تنظیم کوکی isAdmin
+        res.cookie('isAdmin', 'true', {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/'
         });
 
         res.json({
+            message: 'ورود ادمین با موفقیت انجام شد',
             token,
             user: {
-                id: user._id,
+                id: admin.id,
+                username: admin.username,
+                email: admin.email,
+                role: admin.role
+            }
+        });
+    } catch (error) {
+        console.error('Admin login error:', error);
+        res.status(500).json({ error: 'خطا در ورود ادمین' });
+    }
+};
+
+exports.verifyEmail = async (req, res) => {
+    try {
+        const { email, code } = req.body;
+
+        const user = await User.findOne({
+            where: { email }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'کاربری با این ایمیل یافت نشد' });
+        }
+
+        if (user.isVerified) {
+            return res.status(400).json({ error: 'حساب کاربری شما قبلاً تأیید شده است' });
+        }
+
+        const isCodeValid = await bcrypt.compare(code, user.verificationCode);
+        if (!isCodeValid || user.verificationCodeExpires < new Date()) {
+            return res.status(401).json({ error: 'کد تأیید نامعتبر یا منقضی شده است' });
+        }
+
+        await User.update(
+            { isVerified: true, verificationCode: null, verificationCodeExpires: null },
+            { where: { id: user.id } }
+        );
+
+        const token = jwt.sign(
+            { id: user.id, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        // تنظیم کوکی توکن
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+
+        // تنظیم کوکی نقش کاربر
+        res.cookie('userRole', user.role, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+
+        // تنظیم کوکی isAdmin برای ادمین‌ها
+        if (user.role === 'admin') {
+            res.cookie('isAdmin', 'true', {
+                httpOnly: false,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000,
+                path: '/'
+        });
+        }
+
+        res.json({
+            message: 'حساب کاربری شما با موفقیت تأیید شد',
+            token,
+            user: {
+                id: user.id,
                 username: user.username,
+                email: user.email,
                 role: user.role
             }
         });
     } catch (error) {
-        console.error('Error in admin login:', error);
-        res.status(500).json({ message: 'خطای سرور' });
+        console.error('Email verification error:', error);
+        res.status(500).json({ error: 'خطا در تأیید ایمیل' });
+    }
+};
+
+exports.logout = (req, res) => {
+    try {
+        // پاک کردن کوکی‌ها
+        res.clearCookie('token', { path: '/' });
+        res.clearCookie('userRole', { path: '/' });
+        res.clearCookie('isAdmin', { path: '/' });
+
+        res.json({ message: 'خروج با موفقیت انجام شد' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ error: 'خطا در خروج از سیستم' });
     }
 };

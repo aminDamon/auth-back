@@ -18,6 +18,8 @@ router.get('/list', authenticate, async (req, res) => {
 
 // دانلود فایل با لینک مستقیم
 router.get('/download/:filename', authenticate, async (req, res) => {
+    let fileStream = null;
+    
     try {
         const { filename } = req.params;
         
@@ -29,12 +31,15 @@ router.get('/download/:filename', authenticate, async (req, res) => {
             });
         }
 
+        // تنظیم timeout برای درخواست
+        req.setTimeout(300000); // 5 دقیقه timeout برای درخواست
+
         // تنظیم هدرها برای دانلود
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('Content-Type', 'application/zip');
 
         // ایجاد استریم فایل و ارسال به کاربر
-        const fileStream = await ftpService.getFileStream(filename);
+        fileStream = await ftpService.getFileStream(filename);
         
         // مدیریت خطاهای استریم
         fileStream.on('error', (err) => {
@@ -42,7 +47,7 @@ router.get('/download/:filename', authenticate, async (req, res) => {
             if (!res.headersSent) {
                 res.status(500).json({
                     success: false,
-                    error: 'Download failed'
+                    error: 'Download failed: ' + err.message
                 });
             }
         });
@@ -50,12 +55,21 @@ router.get('/download/:filename', authenticate, async (req, res) => {
         // ارسال فایل به کاربر
         fileStream.pipe(res);
 
+        // مدیریت بسته شدن اتصال
+        req.on('close', () => {
+            if (fileStream) {
+                fileStream.destroy();
+            }
+        });
+
     } catch (err) {
         console.error('Download error:', err);
+        if (!res.headersSent) {
         res.status(500).json({
             success: false,
-            error: 'Download failed'
+                error: 'Download failed: ' + err.message
         });
+        }
     }
 });
 

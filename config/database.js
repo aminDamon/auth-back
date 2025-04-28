@@ -11,7 +11,7 @@ module.exports = {
     production: {
         username: 'root',
         password: 'mS5Vxl7hQDAyIHHvKwLHMC1c',
-        database: 'safenetftpsafescap_ir_',
+        database: 'postgres',
         host: 'safescap',
         port: 5432,
         dialect: 'postgres',

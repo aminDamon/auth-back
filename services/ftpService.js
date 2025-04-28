@@ -27,7 +27,10 @@ class FTPService {
                 user: process.env.FTP_USER || 'test',
                 password: process.env.FTP_PASSWORD || '75g3le9X?',
                 port: parseInt(process.env.FTP_PORT) || 21,
-                secure: false
+                secure: false,
+                timeout: 300000, // 5 دقیقه timeout برای اتصال
+                dataTimeout: 300000, // 5 دقیقه timeout برای انتقال داده
+                keepalive: 30000 // ارسال keepalive هر 30 ثانیه
             });
             this.isConnected = true;
             return true;
@@ -75,8 +78,27 @@ class FTPService {
             // ایجاد مسیر موقت برای فایل
             const tempPath = path.join(this.tempDir, path.basename(remotePath));
             
-            // دانلود فایل
+            // دانلود فایل با retry
+            let retries = 3;
+            let lastError = null;
+            
+            while (retries > 0) {
+                try {
             await this.downloadFile(remotePath, tempPath);
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    retries--;
+                    if (retries > 0) {
+                        console.log(`Retrying download (${retries} attempts left)...`);
+                        await new Promise(resolve => setTimeout(resolve, 5000)); // 5 ثانیه تاخیر بین تلاش‌ها
+                    }
+                }
+            }
+            
+            if (retries === 0) {
+                throw lastError;
+            }
             
             // ایجاد استریم خواندن
             const stream = fs.createReadStream(tempPath);
