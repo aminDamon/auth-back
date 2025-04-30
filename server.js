@@ -13,8 +13,8 @@ const app = express();
 // Middleware
 app.use(cors({
     origin: [
-        'https://ftp.safescap.ir', 
-        'https://ftp-safenet.liara.run', 
+        'https://ftp.safescap.ir',
+        'https://ftp-safenet.liara.run',
         'https://safenet.liara.run',
         'http://localhost:3000',
         'https://safeupdate.safenet-co.net'
@@ -48,11 +48,16 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({
         success: false,
-        error: process.env.NODE_ENV === 'production' 
-            ? 'Internal server error' 
+        error: process.env.NODE_ENV === 'production'
+            ? 'Internal server error'
             : err.message
     });
 });
+
+
+// در server.js
+const logRoutes = require('./routes/logRoutes');
+app.use('/api/logs', logRoutes);
 
 // Start server
 const PORT = process.env.PORT || 5001;

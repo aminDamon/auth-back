@@ -35,6 +35,16 @@ const User = sequelize.define('User', {
     field: 'is_verified',
     defaultValue: false
   },
+  system_ip: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: ''
+  },
+  serial_number: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: ''
+  },
   verificationToken: {
     type: DataTypes.STRING(255),
     field: 'verification_token'

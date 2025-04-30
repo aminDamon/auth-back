@@ -19,4 +19,7 @@ router.post('/:userId/change-password', userController.changeUserPassword);
 // حذف کاربر
 router.delete('/:userId', userController.deleteUser);
 
+// ویرایش کاربر
+router.put('/:userId', userController.updateUser);
+
 module.exports = router; 
