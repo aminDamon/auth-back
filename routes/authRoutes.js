@@ -5,9 +5,8 @@ const authenticate = require('../middleware/auth');
 
 // مسیرهای احراز هویت
 router.post('/register', authController.register);
-router.post('/verify', authController.verify);
-router.post('/login-password', authController.loginWithPassword);
-router.post('/login-email', authController.loginWithEmail);
+router.post('/login', authController.loginWithPassword);
+router.post('/change-password', authenticate, authController.changePassword);
 router.get('/me', authenticate, authController.getCurrentUser);
 
 // مسیر لاگین ادمین

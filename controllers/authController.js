@@ -83,63 +83,30 @@ require('dotenv').config();
 // تابع ورود با رمز عبور
 exports.loginWithPassword = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { email, password } = req.body;
 
-        const user = await User.findOne({
-            where: { username }
-        });
-
+        // یافتن کاربر
+        const user = await User.findOne({ where: { email } });
         if (!user) {
-            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+            return res.status(401).json({ error: 'ایمیل یا رمز عبور اشتباه است' });
         }
 
+        // بررسی رمز عبور
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+            return res.status(401).json({ error: 'ایمیل یا رمز عبور اشتباه است' });
         }
 
-        if (!user.isVerified) {
-            return res.status(401).json({ error: 'لطفاً ابتدا حساب کاربری خود را تأیید کنید' });
-        }
-
+        // تولید توکن
         const token = jwt.sign(
-            { id: user.id, role: user.role },
+            { userId: user.id, role: user.role },
             process.env.JWT_SECRET,
-            { expiresIn: '7d' }
+            { expiresIn: '24h' }
         );
 
-        // تنظیم کوکی توکن
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 روز
-            path: '/'
-        });
-
-        // تنظیم کوکی نقش کاربر
-        res.cookie('userRole', user.role, {
-            httpOnly: false,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
-        // اضافه کردن کوکی isAdmin برای کاربران ادمین
-        if (user.role === 'admin') {
-            res.cookie('isAdmin', 'true', {
-                httpOnly: false,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 7 * 24 * 60 * 60 * 1000,
-                path: '/'
-            });
-        }
-
         res.json({
-            message: 'ورود با موفقیت انجام شد',
-            token, // ارسال توکن در پاسخ
+            message: 'ورود موفقیت‌آمیز',
+            token,
             user: {
                 id: user.id,
                 username: user.username,
@@ -187,76 +154,95 @@ exports.loginWithEmail = async (req, res) => {
     }
 };
 
-// دریافت اطلاعات کاربر فعلی
-exports.getCurrentUser = async (req, res) => {
+// تابع تغییر رمز عبور
+exports.changePassword = async (req, res) => {
     try {
-        const user = await User.findByPk(req.user.id, {
-            attributes: ['id', 'username', 'email', 'role']
-        });
-        
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user.userId;
+
+        // یافتن کاربر
+        const user = await User.findByPk(userId);
         if (!user) {
             return res.status(404).json({ error: 'کاربر یافت نشد' });
         }
-        
-        res.json(user);
+
+        // بررسی رمز عبور فعلی
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'رمز عبور فعلی اشتباه است' });
+        }
+
+        // هش کردن رمز عبور جدید
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // به‌روزرسانی رمز عبور
+        await user.update({ password: hashedPassword });
+
+        res.json({ message: 'رمز عبور با موفقیت تغییر کرد' });
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ error: 'خطا در تغییر رمز عبور' });
+    }
+};
+
+// دریافت اطلاعات کاربر فعلی
+exports.getCurrentUser = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const user = await User.findByPk(userId, {
+            attributes: ['id', 'username', 'email', 'role']
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'کاربر یافت نشد' });
+        }
+
+        res.json({
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            }
+        });
     } catch (error) {
         console.error('Get current user error:', error);
         res.status(500).json({ error: 'خطا در دریافت اطلاعات کاربر' });
     }
 };
 
+// تابع ورود ادمین
 exports.loginAdmin = async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { email, password } = req.body;
 
+        // یافتن کاربر ادمین
         const admin = await User.findOne({
-            where: { username, role: 'admin' }
+            where: {
+                email,
+                role: 'admin'
+            }
         });
 
         if (!admin) {
-            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+            return res.status(401).json({ error: 'ایمیل یا رمز عبور اشتباه است' });
         }
 
+        // بررسی رمز عبور
         const isPasswordValid = await bcrypt.compare(password, admin.password);
         if (!isPasswordValid) {
-            return res.status(401).json({ error: 'نام کاربری یا رمز عبور اشتباه است' });
+            return res.status(401).json({ error: 'ایمیل یا رمز عبور اشتباه است' });
         }
 
+        // تولید توکن
         const token = jwt.sign(
-            { id: admin.id, role: admin.role },
+            { userId: admin.id, role: admin.role },
             process.env.JWT_SECRET,
-            { expiresIn: '7d' }
+            { expiresIn: '24h' }
         );
 
-        // تنظیم کوکی توکن
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
-        // تنظیم کوکی نقش کاربر
-        res.cookie('userRole', admin.role, {
-            httpOnly: false,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
-        // تنظیم کوکی isAdmin
-        res.cookie('isAdmin', 'true', {
-            httpOnly: false,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
         res.json({
-            message: 'ورود ادمین با موفقیت انجام شد',
+            message: 'ورود ادمین موفقیت‌آمیز',
             token,
             user: {
                 id: admin.id,
